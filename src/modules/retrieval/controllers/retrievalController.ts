@@ -1,13 +1,19 @@
 import { RequestHandler } from "express";
 import { env } from "../../../config/env";
 import { EmbeddingService } from "../../ingestion/services/EmbeddingService";
-import { SearchFilters } from "../types/retrieval.types";
+import {
+  RerankedCandidate,
+  SearchCandidate,
+  SearchFilters
+} from "../types/retrieval.types";
+import { LLMService } from "../services/LLMService";
 import { SearchService } from "../services/SearchService";
 import { RetrievalValidationService } from "../services/RetrievalValidationService";
 
 const retrievalValidationService = new RetrievalValidationService();
 const embeddingService = new EmbeddingService();
 const searchService = new SearchService();
+const llmService = new LLMService();
 
 function sendEmbeddingError(
   response: Parameters<RequestHandler>[1],
@@ -305,3 +311,114 @@ export const searchHybrid: RequestHandler = async (request, response) => {
     sendSearchError(response, 503, "HYBRID_SEARCH_FAILED", "Hybrid search failed");
   }
 };
+
+export const rerankSearchCandidates: RequestHandler = async (
+  request,
+  response
+) => {
+  const { query, candidates, topK } = request.body as {
+    query?: unknown;
+    candidates?: unknown;
+    topK?: unknown;
+  };
+
+  if (typeof query !== "string" || query.trim().length === 0) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SEARCH_QUERY",
+      "Search query is required"
+    );
+    return;
+  }
+
+  if (
+    !Array.isArray(candidates) ||
+    candidates.length === 0 ||
+    candidates.length > 100
+  ) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_RERANK_CANDIDATES",
+      "candidates must be a non-empty array with at most 100 items"
+    );
+    return;
+  }
+
+  if (
+    topK !== undefined &&
+    (typeof topK !== "number" || !Number.isInteger(topK) || topK < 1 || topK > 100)
+  ) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SEARCH_OPTIONS",
+      "topK must be an integer between 1 and 100"
+    );
+    return;
+  }
+
+  const normalizedCandidates: SearchCandidate[] = [];
+  for (const candidate of candidates) {
+    if (!isRerankCandidate(candidate)) {
+      sendSearchError(
+        response,
+        400,
+        "INVALID_RERANK_CANDIDATES",
+        "Each candidate must include a non-empty resumeId and snippet"
+      );
+      return;
+    }
+
+    normalizedCandidates.push({
+      resumeId: candidate.resumeId,
+      snippet: candidate.snippet,
+      name: typeof candidate.name === "string" ? candidate.name : undefined,
+      role: typeof candidate.role === "string" ? candidate.role : undefined,
+      company:
+        typeof candidate.company === "string" ? candidate.company : undefined,
+      skills: Array.isArray(candidate.skills)
+        ? candidate.skills.filter((skill): skill is string => typeof skill === "string")
+        : undefined,
+      sources: Array.isArray(candidate.sources)
+        ? candidate.sources.filter(
+            (source): source is "bm25" | "vector" =>
+              source === "bm25" || source === "vector"
+          )
+        : []
+    });
+  }
+
+  try {
+    const results = await llmService.rerankCandidates(
+      query.trim(),
+      normalizedCandidates,
+      typeof topK === "number" ? topK : 10
+    );
+
+    response.status(200).json({
+      results,
+      model: env.groqModel
+    });
+  } catch (error) {
+    console.error(error);
+    sendSearchError(response, 503, "RERANK_FAILED", "Candidate re-ranking failed");
+  }
+};
+
+function isRerankCandidate(
+  candidate: unknown
+): candidate is { resumeId: string; snippet: string; [key: string]: unknown } {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    return false;
+  }
+
+  const value = candidate as { resumeId?: unknown; snippet?: unknown };
+  return (
+    typeof value.resumeId === "string" &&
+    value.resumeId.trim().length > 0 &&
+    typeof value.snippet === "string" &&
+    value.snippet.trim().length > 0
+  );
+}
