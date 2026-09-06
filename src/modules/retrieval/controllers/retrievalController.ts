@@ -407,6 +407,101 @@ export const rerankSearchCandidates: RequestHandler = async (
   }
 };
 
+export const summarizeSearchCandidate: RequestHandler = async (
+  request,
+  response
+) => {
+  const { query, candidate, style, maxTokens } = request.body as {
+    query?: unknown;
+    candidate?: unknown;
+    style?: unknown;
+    maxTokens?: unknown;
+  };
+
+  if (typeof query !== "string" || query.trim().length === 0) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SEARCH_QUERY",
+      "Search query is required"
+    );
+    return;
+  }
+
+  if (!isRerankCandidate(candidate)) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SUMMARY_CANDIDATE",
+      "candidate must include a non-empty resumeId and snippet"
+    );
+    return;
+  }
+
+  if (style !== undefined && style !== "short" && style !== "detailed") {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SUMMARY_OPTIONS",
+      "style must be short or detailed"
+    );
+    return;
+  }
+
+  if (
+    maxTokens !== undefined &&
+    (typeof maxTokens !== "number" ||
+      !Number.isInteger(maxTokens) ||
+      maxTokens < 1 ||
+      maxTokens > 1000)
+  ) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SUMMARY_OPTIONS",
+      "maxTokens must be an integer between 1 and 1000"
+    );
+    return;
+  }
+
+  const normalizedCandidate: SearchCandidate = {
+    resumeId: candidate.resumeId,
+    snippet: candidate.snippet,
+    name: typeof candidate.name === "string" ? candidate.name : undefined,
+    role: typeof candidate.role === "string" ? candidate.role : undefined,
+    company:
+      typeof candidate.company === "string" ? candidate.company : undefined,
+    skills: Array.isArray(candidate.skills)
+      ? candidate.skills.filter((skill): skill is string => typeof skill === "string")
+      : undefined,
+    sources: Array.isArray(candidate.sources)
+      ? candidate.sources.filter(
+          (source): source is "bm25" | "vector" =>
+            source === "bm25" || source === "vector"
+        )
+      : []
+  };
+
+  try {
+    const summary = await llmService.summarizeCandidateFit(
+      query.trim(),
+      normalizedCandidate,
+      {
+        style: style === "detailed" ? "detailed" : "short",
+        maxTokens: typeof maxTokens === "number" ? maxTokens : 150
+      }
+    );
+
+    response.status(200).json({
+      resumeId: normalizedCandidate.resumeId,
+      summary
+    });
+  } catch (error) {
+    console.error(error);
+    sendSearchError(response, 503, "SUMMARIZATION_FAILED", "Candidate summarization failed");
+  }
+};
+
 function isRerankCandidate(
   candidate: unknown
 ): candidate is { resumeId: string; snippet: string; [key: string]: unknown } {
