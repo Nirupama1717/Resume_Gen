@@ -25,3 +25,13 @@ export interface SearchOptions {
   summarize?: boolean;
   summaryStyle?: "short" | "detailed";
 }
+
+export interface HybridSearchResult {
+  bm25: SearchCandidate[];
+  vector: SearchCandidate[];
+  timings: {
+    bm25Ms: number;
+    embeddingMs: number;
+    vectorMs: number;
+  };
+}
