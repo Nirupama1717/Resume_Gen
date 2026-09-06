@@ -5,6 +5,7 @@ import { errorHandler } from "./middleware/errorHandler";
 import { loggerMiddleware } from "./middleware/logger";
 import { requestIdMiddleware } from "./middleware/requestId";
 import { ingestionRoutes } from "./modules/ingestion/routes/ingestionRoutes";
+import { retrievalRoutes } from "./modules/retrieval/routes/retrievalRoutes";
 
 export const app = express();
 
@@ -47,5 +48,6 @@ app.get("/v1/health/db", async (_request, response) => {
 });
 
 app.use("/v1", ingestionRoutes);
+app.use("/v1", retrievalRoutes);
 
 app.use(errorHandler);
