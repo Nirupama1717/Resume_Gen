@@ -102,19 +102,73 @@ export class SearchService {
     options: SearchOptions = {}
   ): Promise<EndToEndSearchResult> {
     const startedAt = Date.now();
-    const hybrid = await this.hybridSearch(
+    const warnings: string[] = [];
+    const bm25StartedAt = Date.now();
+    const embeddingStartedAt = Date.now();
+    const bm25Promise = this.bm25Search(
       query,
       filters,
-      options.bm25TopK ?? 20,
-      options.vectorTopK ?? 20
-    );
-    const mergedCandidates = mergeCandidates(hybrid.bm25, hybrid.vector);
+      options.bm25TopK ?? 20
+    ).catch(() => {
+      warnings.push("BM25_SEARCH_FAILED");
+      return [];
+    });
+    const embeddingPromise = this.embeddingService
+      .createEmbedding(query)
+      .catch(() => {
+        warnings.push("VECTOR_SEARCH_FAILED");
+        return null;
+      });
+    const [bm25, queryVector] = await Promise.all([bm25Promise, embeddingPromise]);
+    const bm25Ms = Date.now() - bm25StartedAt;
+    const embeddingMs = Date.now() - embeddingStartedAt;
+    const vectorStartedAt = Date.now();
+    let vector: SearchCandidate[] = [];
+
+    if (queryVector) {
+      try {
+        const resumes = await this.resumeRepository.searchVector(
+          queryVector,
+          filters,
+          options.vectorTopK ?? 20
+        );
+        vector = resumes.map((resume) =>
+          mapResumeToCandidate(resume, "vector", resume.vectorScore)
+        );
+      } catch {
+        warnings.push("VECTOR_SEARCH_FAILED");
+      }
+    }
+
+    if (bm25.length === 0 && vector.length === 0) {
+      const error = new Error("No retrieval strategy is currently available") as Error & {
+        code?: string;
+      };
+      error.code = "SEARCH_UNAVAILABLE";
+      throw error;
+    }
+
+    const mergedCandidates = mergeCandidates(bm25, vector);
     const rerankStartedAt = Date.now();
-    const reranked = await this.llmService.rerankCandidates(
-      query,
-      mergedCandidates,
-      options.rerankTopN ?? 10
-    );
+    let reranked: FinalSearchCandidate[];
+    try {
+      reranked = await this.llmService.rerankCandidates(
+        query,
+        mergedCandidates,
+        options.rerankTopN ?? 10
+      );
+    } catch {
+      warnings.push("LLM_RERANK_FAILED");
+      reranked = mergedCandidates
+        .slice(0, options.rerankTopN ?? 10)
+        .map((candidate, index) => ({
+          ...candidate,
+          rank: index + 1,
+          relevanceScore: 0,
+          reason: "Fallback ordering: BM25 results followed by vector results"
+        }));
+    }
+
     const finalCandidates: FinalSearchCandidate[] = reranked.slice(
       0,
       options.finalTopK ?? 5
@@ -123,26 +177,27 @@ export class SearchService {
     const summarizeStartedAt = Date.now();
 
     if (options.summarize) {
-      await Promise.all(
-        finalCandidates.map(async (candidate) => {
+      await Promise.all(finalCandidates.map(async (candidate) => {
+        try {
           candidate.summary = await this.llmService.summarizeCandidateFit(
             query,
             candidate,
-            {
-              style: options.summaryStyle ?? "short",
-              maxTokens: 150
-            }
+            { style: options.summaryStyle ?? "short", maxTokens: 150 }
           );
-        })
-      );
+        } catch {
+          warnings.push("SUMMARIZATION_FAILED");
+        }
+      }));
     }
 
     return {
       results: finalCandidates,
+      degraded: warnings.length > 0,
+      warnings: [...new Set(warnings)],
       timings: {
-        embeddingMs: hybrid.timings.embeddingMs,
-        bm25Ms: hybrid.timings.bm25Ms,
-        vectorMs: hybrid.timings.vectorMs,
+        embeddingMs,
+        bm25Ms,
+        vectorMs: Date.now() - vectorStartedAt,
         rerankMs,
         summarizeMs: options.summarize ? Date.now() - summarizeStartedAt : 0,
         totalMs: Date.now() - startedAt

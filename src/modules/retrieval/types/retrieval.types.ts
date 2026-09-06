@@ -53,6 +53,8 @@ export interface HybridSearchResult {
 
 export interface EndToEndSearchResult {
   results: FinalSearchCandidate[];
+  degraded: boolean;
+  warnings: string[];
   timings: {
     embeddingMs: number;
     bm25Ms: number;

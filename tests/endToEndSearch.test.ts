@@ -125,7 +125,7 @@ describe("end-to-end search API", () => {
 
   test("returns a controlled failure when the pipeline fails", async () => {
     mockSearchBm25.mockRejectedValue(new Error("Atlas unavailable"));
-    mockCreateEmbedding.mockResolvedValue([0.1, 0.2]);
+    mockCreateEmbedding.mockRejectedValue(new Error("Mistral unavailable"));
 
     const response = await request(app)
       .post("/v1/search")
@@ -134,8 +134,120 @@ describe("end-to-end search API", () => {
     expect(response.status).toBe(503);
     expect(response.body).toMatchObject({
       success: false,
-      errorCode: "SEARCH_FAILED",
-      message: "End-to-end search failed"
+      errorCode: "SEARCH_UNAVAILABLE",
+      message: "No retrieval strategy is currently available"
     });
+  });
+
+  test("falls back to BM25 when vector retrieval fails", async () => {
+    mockSearchBm25.mockResolvedValue([
+      { _id: { toString: () => "resume-bm25" }, bm25Score: 8 }
+    ]);
+    mockCreateEmbedding.mockRejectedValue(new Error("Mistral unavailable"));
+    mockRerankCandidates.mockResolvedValue([
+      {
+        resumeId: "resume-bm25",
+        sources: ["bm25"],
+        bm25Score: 8,
+        rank: 1,
+        relevanceScore: 0.5,
+        reason: "Fallback candidate"
+      }
+    ]);
+
+    const response = await request(app)
+      .post("/v1/search")
+      .send({ query: "RAG" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      degraded: true,
+      warnings: ["VECTOR_SEARCH_FAILED"],
+      results: [expect.objectContaining({ resumeId: "resume-bm25" })]
+    });
+  });
+
+  test("falls back to vector search when BM25 fails", async () => {
+    mockSearchBm25.mockRejectedValue(new Error("Atlas unavailable"));
+    mockCreateEmbedding.mockResolvedValue([0.1, 0.2]);
+    mockSearchVector.mockResolvedValue([
+      { _id: { toString: () => "resume-vector" }, vectorScore: 0.9 }
+    ]);
+    mockRerankCandidates.mockResolvedValue([
+      {
+        resumeId: "resume-vector",
+        sources: ["vector"],
+        vectorScore: 0.9,
+        rank: 1,
+        relevanceScore: 0.5,
+        reason: "Fallback candidate"
+      }
+    ]);
+
+    const response = await request(app)
+      .post("/v1/search")
+      .send({ query: "RAG" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      degraded: true,
+      warnings: ["BM25_SEARCH_FAILED"],
+      results: [expect.objectContaining({ resumeId: "resume-vector" })]
+    });
+  });
+
+  test("uses BM25-first ordering when reranking fails", async () => {
+    mockSearchBm25.mockResolvedValue([
+      { _id: { toString: () => "resume-bm25" }, bm25Score: 8 }
+    ]);
+    mockCreateEmbedding.mockResolvedValue([0.1, 0.2]);
+    mockSearchVector.mockResolvedValue([
+      { _id: { toString: () => "resume-vector" }, vectorScore: 0.9 }
+    ]);
+    mockRerankCandidates.mockRejectedValue(new Error("Groq unavailable"));
+
+    const response = await request(app)
+      .post("/v1/search")
+      .send({ query: "RAG", options: { finalTopK: 2 } });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      degraded: true,
+      warnings: ["LLM_RERANK_FAILED"],
+      results: [
+        expect.objectContaining({ resumeId: "resume-bm25", rank: 1 }),
+        expect.objectContaining({ resumeId: "resume-vector", rank: 2 })
+      ]
+    });
+  });
+
+  test("keeps ranked results when summarization fails", async () => {
+    mockSearchBm25.mockResolvedValue([
+      { _id: { toString: () => "resume-1" }, bm25Score: 8 }
+    ]);
+    mockCreateEmbedding.mockResolvedValue([0.1, 0.2]);
+    mockSearchVector.mockResolvedValue([]);
+    mockRerankCandidates.mockResolvedValue([
+      {
+        resumeId: "resume-1",
+        sources: ["bm25"],
+        rank: 1,
+        relevanceScore: 0.9,
+        reason: "Good fit"
+      }
+    ]);
+    mockSummarizeCandidateFit.mockRejectedValue(new Error("Groq unavailable"));
+
+    const response = await request(app)
+      .post("/v1/search")
+      .send({ query: "RAG", options: { summarize: true } });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      degraded: true,
+      warnings: ["SUMMARIZATION_FAILED"],
+      results: [expect.objectContaining({ resumeId: "resume-1" })]
+    });
+    expect(response.body.results[0].summary).toBeUndefined();
   });
 });

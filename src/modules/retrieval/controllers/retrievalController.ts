@@ -555,13 +555,21 @@ export const endToEndSearch: RequestHandler = async (request, response) => {
         reason: candidate.reason,
         ...(candidate.summary ? { summary: candidate.summary } : {})
       })),
-      degraded: false,
-      warnings: [],
+      degraded: result.degraded,
+      warnings: result.warnings,
       timings: result.timings
     });
   } catch (error) {
     console.error(error);
-    sendSearchError(response, 503, "SEARCH_FAILED", "End-to-end search failed");
+    const errorCode =
+      error && typeof error === "object" && "code" in error && error.code === "SEARCH_UNAVAILABLE"
+        ? "SEARCH_UNAVAILABLE"
+        : "SEARCH_FAILED";
+    const message =
+      errorCode === "SEARCH_UNAVAILABLE"
+        ? "No retrieval strategy is currently available"
+        : "End-to-end search failed";
+    sendSearchError(response, 503, errorCode, message);
   }
 };
 
