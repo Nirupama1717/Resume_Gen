@@ -163,3 +163,76 @@ export const searchBm25: RequestHandler = async (request, response) => {
     sendSearchError(response, 503, "BM25_SEARCH_FAILED", "BM25 search failed");
   }
 };
+
+export const searchVector: RequestHandler = async (request, response) => {
+  const { query, topK, filters } = request.body as {
+    query?: unknown;
+    topK?: unknown;
+    filters?: unknown;
+  };
+
+  if (typeof query !== "string" || query.trim().length === 0) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SEARCH_QUERY",
+      "Search query is required"
+    );
+    return;
+  }
+
+  if (
+    topK !== undefined &&
+    (typeof topK !== "number" || !Number.isInteger(topK) || topK < 1 || topK > 100)
+  ) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SEARCH_OPTIONS",
+      "topK must be an integer between 1 and 100"
+    );
+    return;
+  }
+
+  const searchFilters = filters ?? {};
+  if (
+    typeof searchFilters !== "object" ||
+    searchFilters === null ||
+    Array.isArray(searchFilters) ||
+    ("minYearsExperience" in searchFilters &&
+      (typeof searchFilters.minYearsExperience !== "number" ||
+        !Number.isFinite(searchFilters.minYearsExperience) ||
+        searchFilters.minYearsExperience < 0))
+  ) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SEARCH_FILTERS",
+      "minYearsExperience must be a non-negative number"
+    );
+    return;
+  }
+
+  try {
+    const results = await searchService.vectorSearch(
+      query.trim(),
+      searchFilters as SearchFilters,
+      typeof topK === "number" ? topK : 20
+    );
+
+    response.status(200).json({
+      mode: "vector",
+      query: query.trim(),
+      count: results.length,
+      results
+    });
+  } catch (error) {
+    console.error(error);
+    sendSearchError(
+      response,
+      503,
+      "VECTOR_SEARCH_FAILED",
+      "Vector search failed"
+    );
+  }
+};
