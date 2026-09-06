@@ -4,7 +4,8 @@ import { EmbeddingService } from "../../ingestion/services/EmbeddingService";
 import {
   RerankedCandidate,
   SearchCandidate,
-  SearchFilters
+  SearchFilters,
+  SearchOptions
 } from "../types/retrieval.types";
 import { LLMService } from "../services/LLMService";
 import { SearchService } from "../services/SearchService";
@@ -501,6 +502,104 @@ export const summarizeSearchCandidate: RequestHandler = async (
     sendSearchError(response, 503, "SUMMARIZATION_FAILED", "Candidate summarization failed");
   }
 };
+
+export const endToEndSearch: RequestHandler = async (request, response) => {
+  const { query, filters, options } = request.body as {
+    query?: unknown;
+    filters?: unknown;
+    options?: unknown;
+  };
+
+  if (typeof query !== "string" || query.trim().length === 0) {
+    sendSearchError(response, 400, "INVALID_SEARCH_QUERY", "Search query is required");
+    return;
+  }
+
+  if (!isValidSearchFilters(filters)) {
+    sendSearchError(
+      response,
+      400,
+      "INVALID_SEARCH_FILTERS",
+      "minYearsExperience must be a non-negative number"
+    );
+    return;
+  }
+
+  if (!isValidEndToEndOptions(options)) {
+    sendSearchError(response, 400, "INVALID_SEARCH_OPTIONS", "Search options are invalid");
+    return;
+  }
+
+  try {
+    const result = await searchService.endToEndSearch(
+      query.trim(),
+      (filters ?? {}) as SearchFilters,
+      (options ?? {}) as SearchOptions
+    );
+
+    response.status(200).json({
+      query: query.trim(),
+      results: result.results.map((candidate, index) => ({
+        ...candidate,
+        rank: index + 1
+      })),
+      degraded: false,
+      warnings: [],
+      timings: result.timings
+    });
+  } catch (error) {
+    console.error(error);
+    sendSearchError(response, 503, "SEARCH_FAILED", "End-to-end search failed");
+  }
+};
+
+function isValidSearchFilters(filters: unknown): boolean {
+  if (filters === undefined) {
+    return true;
+  }
+  if (typeof filters !== "object" || filters === null || Array.isArray(filters)) {
+    return false;
+  }
+
+  const value = filters as { minYearsExperience?: unknown };
+  return (
+    value.minYearsExperience === undefined ||
+    (typeof value.minYearsExperience === "number" &&
+      Number.isFinite(value.minYearsExperience) &&
+      value.minYearsExperience >= 0)
+  );
+}
+
+function isValidEndToEndOptions(options: unknown): boolean {
+  if (options === undefined) {
+    return true;
+  }
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    return false;
+  }
+
+  const value = options as Record<string, unknown>;
+  const limits = ["bm25TopK", "vectorTopK", "rerankTopN", "finalTopK"];
+  if (
+    limits.some(
+      (key) =>
+        value[key] !== undefined &&
+        (typeof value[key] !== "number" ||
+          !Number.isInteger(value[key]) ||
+          value[key] < 1 ||
+          value[key] > 100)
+    )
+  ) {
+    return false;
+  }
+
+  return (
+    (value.summarize === undefined || typeof value.summarize === "boolean") &&
+    (value.summaryStyle === undefined ||
+      value.summaryStyle === "short" ||
+      value.summaryStyle === "detailed")
+  );
+}
 
 function isRerankCandidate(
   candidate: unknown

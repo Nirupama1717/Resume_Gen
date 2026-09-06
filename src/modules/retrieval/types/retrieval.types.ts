@@ -23,6 +23,10 @@ export interface RerankedCandidate extends SearchCandidate {
   reason: string;
 }
 
+export interface FinalSearchCandidate extends RerankedCandidate {
+  summary?: string;
+}
+
 export interface SummaryOptions {
   style: "short" | "detailed";
   maxTokens: number;
@@ -44,5 +48,17 @@ export interface HybridSearchResult {
     bm25Ms: number;
     embeddingMs: number;
     vectorMs: number;
+  };
+}
+
+export interface EndToEndSearchResult {
+  results: FinalSearchCandidate[];
+  timings: {
+    embeddingMs: number;
+    bm25Ms: number;
+    vectorMs: number;
+    rerankMs: number;
+    summarizeMs: number;
+    totalMs: number;
   };
 }

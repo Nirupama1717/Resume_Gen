@@ -6,7 +6,8 @@ import {
 		searchVector,
 		searchHybrid,
 		rerankSearchCandidates,
-		summarizeSearchCandidate
+		summarizeSearchCandidate,
+		endToEndSearch
 } from "../controllers/retrievalController";
 
 export const retrievalRoutes = Router();
@@ -18,3 +19,4 @@ retrievalRoutes.post("/search/vector", searchVector);
 retrievalRoutes.post("/search/hybrid", searchHybrid);
 retrievalRoutes.post("/search/rerank", rerankSearchCandidates);
 retrievalRoutes.post("/search/summarize", summarizeSearchCandidate);
+retrievalRoutes.post("/search", endToEndSearch);

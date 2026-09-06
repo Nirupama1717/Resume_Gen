@@ -1,16 +1,22 @@
 import { EmbeddingService } from "../../ingestion/services/EmbeddingService";
+import { LLMService } from "./LLMService";
 import { ResumeRepository } from "../repositories/ResumeRepository";
 import {
   HybridSearchResult,
+  EndToEndSearchResult,
+  FinalSearchCandidate,
   SearchCandidate,
-  SearchFilters
+  SearchFilters,
+  SearchOptions
 } from "../types/retrieval.types";
 import { mapResumeToCandidate } from "../utils/candidateMapper";
+import { mergeCandidates } from "../utils/deduplicate";
 
 export class SearchService {
   constructor(
     private readonly resumeRepository = new ResumeRepository(),
-    private readonly embeddingService = new EmbeddingService()
+    private readonly embeddingService = new EmbeddingService(),
+    private readonly llmService = new LLMService()
   ) {}
 
   async bm25Search(
@@ -85,6 +91,59 @@ export class SearchService {
         bm25Ms: bm25Result.durationMs,
         embeddingMs: embeddingResult.durationMs,
         vectorMs: Date.now() - vectorStartedAt
+      }
+    };
+  }
+
+  async endToEndSearch(
+    query: string,
+    filters: SearchFilters = {},
+    options: SearchOptions = {}
+  ): Promise<EndToEndSearchResult> {
+    const startedAt = Date.now();
+    const hybrid = await this.hybridSearch(
+      query,
+      filters,
+      Math.max(options.bm25TopK ?? 20, options.vectorTopK ?? 20)
+    );
+    const mergedCandidates = mergeCandidates(hybrid.bm25, hybrid.vector);
+    const rerankStartedAt = Date.now();
+    const reranked = await this.llmService.rerankCandidates(
+      query,
+      mergedCandidates,
+      options.rerankTopN ?? 10
+    );
+    const finalCandidates: FinalSearchCandidate[] = reranked.slice(
+      0,
+      options.finalTopK ?? 5
+    );
+    const rerankMs = Date.now() - rerankStartedAt;
+    const summarizeStartedAt = Date.now();
+
+    if (options.summarize) {
+      await Promise.all(
+        finalCandidates.map(async (candidate) => {
+          candidate.summary = await this.llmService.summarizeCandidateFit(
+            query,
+            candidate,
+            {
+              style: options.summaryStyle ?? "short",
+              maxTokens: 150
+            }
+          );
+        })
+      );
+    }
+
+    return {
+      results: finalCandidates,
+      timings: {
+        embeddingMs: hybrid.timings.embeddingMs,
+        bm25Ms: hybrid.timings.bm25Ms,
+        vectorMs: hybrid.timings.vectorMs,
+        rerankMs,
+        summarizeMs: options.summarize ? Date.now() - summarizeStartedAt : 0,
+        totalMs: Date.now() - startedAt
       }
     };
   }
