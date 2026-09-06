@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { checkDatabaseConnection } from "./config/database";
+import { env } from "./config/env";
 import { errorHandler } from "./middleware/errorHandler";
 import { loggerMiddleware } from "./middleware/logger";
 import { requestIdMiddleware } from "./middleware/requestId";
@@ -10,8 +11,8 @@ import { retrievalRoutes } from "./modules/retrieval/routes/retrievalRoutes";
 export const app = express();
 
 app.use(cors());
-app.use(express.json());
 app.use(requestIdMiddleware);
+app.use(express.json({ limit: env.requestBodyLimit }));
 app.use(loggerMiddleware);
 
 app.get("/v1/health", (_request, response) => {

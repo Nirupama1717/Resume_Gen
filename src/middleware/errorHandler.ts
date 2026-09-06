@@ -6,7 +6,11 @@ export const errorHandler: ErrorRequestHandler = (
   response,
   _next
 ): void => {
-  const uploadError = error as { code?: string };
+  const uploadError = error as {
+    code?: string;
+    type?: string;
+    status?: number;
+  };
 
   if (uploadError.code === "LIMIT_FILE_SIZE") {
     response.status(413).json({
@@ -14,6 +18,16 @@ export const errorHandler: ErrorRequestHandler = (
       requestId: response.getHeader("x-request-id"),
       errorCode: "FILE_TOO_LARGE",
       message: "Resume exceeds maximum upload size"
+    });
+    return;
+  }
+
+  if (uploadError.type === "entity.too.large" || uploadError.status === 413) {
+    response.status(413).json({
+      success: false,
+      requestId: response.getHeader("x-request-id"),
+      errorCode: "REQUEST_BODY_TOO_LARGE",
+      message: "Request body exceeds the maximum allowed size"
     });
     return;
   }

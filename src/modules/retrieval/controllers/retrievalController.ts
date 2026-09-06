@@ -107,7 +107,7 @@ export const searchBm25: RequestHandler = async (request, response) => {
     filters?: unknown;
   };
 
-  if (typeof query !== "string" || query.trim().length === 0) {
+  if (!isValidSearchQuery(query)) {
     sendSearchError(
       response,
       400,
@@ -178,7 +178,7 @@ export const searchVector: RequestHandler = async (request, response) => {
     filters?: unknown;
   };
 
-  if (typeof query !== "string" || query.trim().length === 0) {
+  if (!isValidSearchQuery(query)) {
     sendSearchError(
       response,
       400,
@@ -251,7 +251,7 @@ export const searchHybrid: RequestHandler = async (request, response) => {
     filters?: unknown;
   };
 
-  if (typeof query !== "string" || query.trim().length === 0) {
+  if (!isValidSearchQuery(query)) {
     sendSearchError(
       response,
       400,
@@ -323,7 +323,7 @@ export const rerankSearchCandidates: RequestHandler = async (
     topK?: unknown;
   };
 
-  if (typeof query !== "string" || query.trim().length === 0) {
+  if (!isValidSearchQuery(query)) {
     sendSearchError(
       response,
       400,
@@ -419,7 +419,7 @@ export const summarizeSearchCandidate: RequestHandler = async (
     maxTokens?: unknown;
   };
 
-  if (typeof query !== "string" || query.trim().length === 0) {
+  if (!isValidSearchQuery(query)) {
     sendSearchError(
       response,
       400,
@@ -510,7 +510,7 @@ export const endToEndSearch: RequestHandler = async (request, response) => {
     options?: unknown;
   };
 
-  if (typeof query !== "string" || query.trim().length === 0) {
+  if (!isValidSearchQuery(query)) {
     sendSearchError(response, 400, "INVALID_SEARCH_QUERY", "Search query is required");
     return;
   }
@@ -635,6 +635,15 @@ function isRerankCandidate(
     typeof value.resumeId === "string" &&
     value.resumeId.trim().length > 0 &&
     typeof value.snippet === "string" &&
-    value.snippet.trim().length > 0
+    value.snippet.trim().length > 0 &&
+    value.snippet.length <= 10000
+  );
+}
+
+function isValidSearchQuery(query: unknown): query is string {
+  return (
+    typeof query === "string" &&
+    query.trim().length > 0 &&
+    query.trim().length <= env.maxSearchQueryLength
   );
 }

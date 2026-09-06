@@ -8,6 +8,10 @@ const embeddingDimension = Number.parseInt(
   process.env.EMBEDDING_DIMENSION ?? "1024",
   10
 );
+const maxSearchQueryLength = Number.parseInt(
+  process.env.MAX_SEARCH_QUERY_LENGTH ?? "2000",
+  10
+);
 
 if (!Number.isInteger(port) || port <= 0) {
   throw new Error("PORT must be a positive integer");
@@ -15,6 +19,10 @@ if (!Number.isInteger(port) || port <= 0) {
 
 if (!Number.isInteger(embeddingDimension) || embeddingDimension <= 0) {
   throw new Error("EMBEDDING_DIMENSION must be a positive integer");
+}
+
+if (!Number.isInteger(maxSearchQueryLength) || maxSearchQueryLength <= 0) {
+  throw new Error("MAX_SEARCH_QUERY_LENGTH must be a positive integer");
 }
 
 export const env = {
@@ -30,5 +38,7 @@ export const env = {
   atlasVectorIndex: process.env.ATLAS_VECTOR_INDEX ?? "resume_vector",
   groqApiKey: process.env.GROQ_API_KEY,
   groqModel:
-    process.env.GROQ_MODEL ?? "meta-llama/llama-4-scout-17b-16e-instruct"
+    process.env.GROQ_MODEL ?? "meta-llama/llama-4-scout-17b-16e-instruct",
+  requestBodyLimit: process.env.REQUEST_BODY_LIMIT ?? "1mb",
+  maxSearchQueryLength
 } as const;
