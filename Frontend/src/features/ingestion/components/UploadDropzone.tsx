@@ -1,23 +1,10 @@
 import { useRef, useState, type DragEvent } from "react";
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+import { validateResumeFile } from "../services/ingestionValidation";
 
 interface UploadDropzoneProps {
   onFileSelect: (file: File) => void;
   disabled?: boolean;
   error?: string;
-}
-
-function validatePdf(file: File): string | undefined {
-  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-    return "Only PDF files are allowed";
-  }
-
-  if (file.size > MAX_FILE_SIZE) {
-    return "Maximum file size is 5MB";
-  }
-
-  return undefined;
 }
 
 export function UploadDropzone({
@@ -30,13 +17,9 @@ export function UploadDropzone({
   const [validationError, setValidationError] = useState<string>();
 
   function handleFile(file: File | undefined) {
-    if (!file) {
-      return;
-    }
-
-    const nextError = validatePdf(file);
+    const nextError = validateResumeFile(file);
     setValidationError(nextError);
-    if (!nextError) {
+    if (file && !nextError) {
       onFileSelect(file);
     }
   }
