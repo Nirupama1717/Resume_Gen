@@ -25,5 +25,7 @@ export const env = {
   useLlmParser,
   mistralApiKey: process.env.MISTRAL_API_KEY,
   mistralEmbedModel: process.env.MISTRAL_EMBED_MODEL ?? "mistral-embed",
-  embeddingDimension
+  embeddingDimension,
+  atlasSearchIndex: process.env.ATLAS_SEARCH_INDEX ?? "resume_bm25",
+  atlasVectorIndex: process.env.ATLAS_VECTOR_INDEX ?? "resume_vector"
 } as const;
