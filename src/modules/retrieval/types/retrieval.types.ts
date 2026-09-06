@@ -17,6 +17,17 @@ export interface SearchCandidate {
   sources: SearchSource[];
 }
 
+export interface RerankedCandidate extends SearchCandidate {
+  rank: number;
+  relevanceScore: number;
+  reason: string;
+}
+
+export interface SummaryOptions {
+  style: "short" | "detailed";
+  maxTokens: number;
+}
+
 export interface SearchOptions {
   bm25TopK?: number;
   vectorTopK?: number;

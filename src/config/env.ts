@@ -27,5 +27,8 @@ export const env = {
   mistralEmbedModel: process.env.MISTRAL_EMBED_MODEL ?? "mistral-embed",
   embeddingDimension,
   atlasSearchIndex: process.env.ATLAS_SEARCH_INDEX ?? "resume_bm25",
-  atlasVectorIndex: process.env.ATLAS_VECTOR_INDEX ?? "resume_vector"
+  atlasVectorIndex: process.env.ATLAS_VECTOR_INDEX ?? "resume_vector",
+  groqApiKey: process.env.GROQ_API_KEY,
+  groqModel:
+    process.env.GROQ_MODEL ?? "meta-llama/llama-4-scout-17b-16e-instruct"
 } as const;
