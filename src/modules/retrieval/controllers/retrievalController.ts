@@ -536,6 +536,8 @@ export const endToEndSearch: RequestHandler = async (request, response) => {
       (filters ?? {}) as SearchFilters,
       (options ?? {}) as SearchOptions
     );
+    response.locals.retrievalTimings = result.timings;
+    response.locals.retrievalWarnings = result.warnings;
 
     response.status(200).json({
       query: query.trim(),

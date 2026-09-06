@@ -9,6 +9,15 @@ interface IngestionTimings {
   totalMs?: number;
 }
 
+interface RetrievalTimings {
+  embeddingMs: number;
+  bm25Ms: number;
+  vectorMs: number;
+  rerankMs: number;
+  summarizeMs: number;
+  totalMs: number;
+}
+
 export function loggerMiddleware(
   request: Request,
   response: Response,
@@ -21,6 +30,12 @@ export function loggerMiddleware(
     const timings = response.locals.ingestionTimings as
       | IngestionTimings
       | undefined;
+    const retrievalTimings = response.locals.retrievalTimings as
+      | RetrievalTimings
+      | undefined;
+    const retrievalWarnings = response.locals.retrievalWarnings as
+      | string[]
+      | undefined;
     const fileName =
       response.locals.fileName ?? request.file?.originalname;
 
@@ -31,7 +46,15 @@ export function loggerMiddleware(
         endpoint: request.originalUrl,
         statusCode: response.statusCode,
         ...(typeof fileName === "string" ? { fileName } : {}),
-        ...(timings ?? { totalMs: durationMs })
+        ...(retrievalTimings
+          ? {
+              durationMs,
+              componentTimings: retrievalTimings,
+              ...(retrievalWarnings?.length
+                ? { warnings: retrievalWarnings }
+                : {})
+            }
+          : timings ?? { totalMs: durationMs })
       })
     );
   });
