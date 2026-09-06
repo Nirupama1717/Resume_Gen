@@ -1,0 +1,27 @@
+export type SearchSource = "bm25" | "vector";
+
+export interface SearchFilters {
+  minYearsExperience?: number;
+}
+
+export interface SearchCandidate {
+  resumeId: string;
+  name?: string;
+  role?: string;
+  company?: string;
+  totalExperience?: number;
+  skills?: string[];
+  snippet?: string;
+  bm25Score?: number;
+  vectorScore?: number;
+  sources: SearchSource[];
+}
+
+export interface SearchOptions {
+  bm25TopK?: number;
+  vectorTopK?: number;
+  rerankTopN?: number;
+  finalTopK?: number;
+  summarize?: boolean;
+  summaryStyle?: "short" | "detailed";
+}
