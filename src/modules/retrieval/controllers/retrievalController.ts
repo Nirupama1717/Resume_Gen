@@ -540,8 +540,20 @@ export const endToEndSearch: RequestHandler = async (request, response) => {
     response.status(200).json({
       query: query.trim(),
       results: result.results.map((candidate, index) => ({
-        ...candidate,
-        rank: index + 1
+        rank: index + 1,
+        resumeId: candidate.resumeId,
+        name: candidate.name,
+        role: candidate.role,
+        company: candidate.company,
+        totalExperience: candidate.totalExperience,
+        skills: candidate.skills,
+        snippet: candidate.snippet,
+        sources: candidate.sources,
+        bm25Score: candidate.bm25Score,
+        vectorScore: candidate.vectorScore,
+        relevanceScore: candidate.relevanceScore,
+        reason: candidate.reason,
+        ...(candidate.summary ? { summary: candidate.summary } : {})
       })),
       degraded: false,
       warnings: [],

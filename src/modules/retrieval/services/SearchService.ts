@@ -50,7 +50,8 @@ export class SearchService {
   async hybridSearch(
     query: string,
     filters: SearchFilters = {},
-    topK = 20
+    topK = 20,
+    vectorTopK = topK
   ): Promise<HybridSearchResult> {
     const embeddingStartedAt = Date.now();
     const bm25StartedAt = Date.now();
@@ -79,7 +80,7 @@ export class SearchService {
     const vectorResumes = await this.resumeRepository.searchVector(
       embeddingResult.queryVector,
       filters,
-      topK
+      vectorTopK
     );
 
     return {
@@ -104,7 +105,8 @@ export class SearchService {
     const hybrid = await this.hybridSearch(
       query,
       filters,
-      Math.max(options.bm25TopK ?? 20, options.vectorTopK ?? 20)
+      options.bm25TopK ?? 20,
+      options.vectorTopK ?? 20
     );
     const mergedCandidates = mergeCandidates(hybrid.bm25, hybrid.vector);
     const rerankStartedAt = Date.now();
